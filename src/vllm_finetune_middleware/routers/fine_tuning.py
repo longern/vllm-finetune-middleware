@@ -54,7 +54,7 @@ STATUS_MAP = {
 async def job_daemon(job_id: str):
     while True:
         await asyncio.sleep(5)
-        job = retrieve_job(job_id)
+        job = await retrieve_job(job_id)
         if job.status in ("failed", "cancelled"):
             return
 
