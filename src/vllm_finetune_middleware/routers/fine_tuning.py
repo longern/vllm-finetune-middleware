@@ -3,6 +3,7 @@
 import asyncio
 import logging
 import os
+import shutil
 import tempfile
 import time
 from typing import Literal
@@ -52,6 +53,27 @@ STATUS_MAP = {
 }
 
 
+def download_s3_directory(s3_directory_url: str, tempdir: str):
+    s3_client = get_s3_client()
+
+    parsed_url = urlparse(s3_directory_url)
+    bucket_name = parsed_url.netloc
+    path = parsed_url.path.lstrip("/")
+    model_directory_key = path if path.endswith("/") else path + "/"
+
+    for obj in s3_client.list_objects_v2(
+        Bucket=bucket_name, Prefix=model_directory_key
+    ).get("Contents", []):
+        file_key = obj["Key"]
+        if file_key.endswith("/"):  # Skip directory entries
+            continue
+
+        relative_path = os.path.relpath(file_key, model_directory_key)
+        local_path = os.path.join(tempdir, relative_path)
+        os.makedirs(os.path.dirname(local_path), exist_ok=True)
+        s3_client.download_file(bucket_name, file_key, local_path)
+
+
 async def job_daemon(job_id: str):
     while True:
         await asyncio.sleep(5)
@@ -62,41 +84,29 @@ async def job_daemon(job_id: str):
         if job.status == "succeeded":
             break
 
-    # Download model artifacts
-    s3_client = get_s3_client()
-    s3_model_hub_url = os.getenv("AWS_MODEL_HUB_URL")
-    if s3_model_hub_url is None:
+    if "AWS_ARTIFACTS_URL" not in os.environ:
         return
 
-    parsed_url = urlparse(s3_model_hub_url)
-    bucket_name = parsed_url.netloc
-    path = parsed_url.path.lstrip("/")
-    model_directory_key = os.path.join(path, f"{job_id}")
-
-    job = JOBS[job_id]
-    prefix = f"ft.{job.suffix}" if job.suffix else "ft."
-
     try:
-        with tempfile.TemporaryDirectory(prefix=prefix) as tmpdir:
-            # Download model directory
-            for obj in s3_client.list_objects_v2(
-                Bucket=bucket_name, Prefix=model_directory_key
-            ).get("Contents", []):
-                file_key = obj["Key"]
-                relative_path = os.path.relpath(file_key, model_directory_key)
-                local_path = os.path.join(tmpdir, relative_path)
-                os.makedirs(os.path.dirname(local_path), exist_ok=True)
-                s3_client.download_file(bucket_name, file_key, local_path)
+        job = JOBS[job_id]
+        prefix = f"ft.{job.suffix}." if job.suffix else "ft."
 
-            model_name = os.path.basename(tmpdir).replace(".", ":")
-            job.fine_tuned_model = model_name
+        tempdir = tempfile.mkdtemp(prefix=prefix)
 
-            async with httpx.AsyncClient() as client:
-                resp = await client.post(
-                    "http://localhost:8000/v1/load_lora_adapter",
-                    json={"lora_name": model_name, "lora_path": tmpdir},
-                )
-                resp.raise_for_status()
+        model_s3_path = os.path.join(os.environ["AWS_ARTIFACTS_URL"], job_id, "model")
+        download_s3_directory(model_s3_path, tempdir)
+
+        model_name = os.path.basename(tempdir).replace(".", ":")
+        job.fine_tuned_model = model_name
+
+        async with httpx.AsyncClient() as client:
+            resp = await client.post(
+                "http://localhost:8000/v1/load_lora_adapter",
+                json={"lora_name": model_name, "lora_path": tempdir},
+            )
+            resp.raise_for_status()
+
+        shutil.rmtree(tempdir)
 
     except Exception as e:
         logging.exception(f"Failed to download model artifacts for job {job_id}: {e}")
