@@ -1,6 +1,7 @@
 """Router for fine-tuning jobs."""
 
 import asyncio
+import logging
 import os
 import tempfile
 import time
@@ -75,24 +76,30 @@ async def job_daemon(job_id: str):
     job = JOBS[job_id]
     prefix = f"ft.{job.suffix}" if job.suffix else "ft."
 
-    with tempfile.TemporaryDirectory(prefix=prefix) as tmpdir:
-        # Download model directory
-        for obj in s3_client.list_objects_v2(
-            Bucket=bucket_name, Prefix=model_directory_key
-        ).get("Contents", []):
-            file_key = obj["Key"]
-            relative_path = os.path.relpath(file_key, model_directory_key)
-            local_path = os.path.join(tmpdir, relative_path)
-            os.makedirs(os.path.dirname(local_path), exist_ok=True)
-            s3_client.download_file(bucket_name, file_key, local_path)
+    try:
+        with tempfile.TemporaryDirectory(prefix=prefix) as tmpdir:
+            # Download model directory
+            for obj in s3_client.list_objects_v2(
+                Bucket=bucket_name, Prefix=model_directory_key
+            ).get("Contents", []):
+                file_key = obj["Key"]
+                relative_path = os.path.relpath(file_key, model_directory_key)
+                local_path = os.path.join(tmpdir, relative_path)
+                os.makedirs(os.path.dirname(local_path), exist_ok=True)
+                s3_client.download_file(bucket_name, file_key, local_path)
 
-        model_name = os.path.basename(tmpdir).replace(".", ":")
+            model_name = os.path.basename(tmpdir).replace(".", ":")
+            job.fine_tuned_model = model_name
 
-        async with httpx.AsyncClient() as client:
-            await client.post(
-                "http://localhost:8000//v1/load_lora_adapter",
-                json={"lora_name": model_name, "lora_path": tmpdir},
-            )
+            async with httpx.AsyncClient() as client:
+                resp = await client.post(
+                    "http://localhost:8000/v1/load_lora_adapter",
+                    json={"lora_name": model_name, "lora_path": tmpdir},
+                )
+                resp.raise_for_status()
+
+    except Exception as e:
+        logging.exception(f"Failed to download model artifacts for job {job_id}: {e}")
 
 
 @router.post("/jobs", response_model=JobRead)
@@ -160,5 +167,7 @@ async def retrieve_job(job_id: str):
     job_read.status = STATUS_MAP[body["status"]]
     if job_read.status in ("succeeded", "failed", "cancelled"):
         job_read.finished_at = int(time.time())
+    if body.get("error"):
+        job_read.error = body["error"]
 
     return job_read

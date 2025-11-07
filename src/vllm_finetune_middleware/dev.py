@@ -1,4 +1,5 @@
 import asyncio
+import logging
 import time
 import uuid
 from typing import Any
@@ -21,6 +22,9 @@ def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counte
         elif task.exception() is not None:
             JOBS[job_id]["status"] = "FAILED"
             JOBS[job_id]["error"] = {"message": str(task.exception())}
+            logging.exception(
+                f"Job {job_id} failed with exception", exc_info=task.exception()
+            )
         else:
             JOBS[job_id]["output"] = task.result()
             JOBS[job_id]["status"] = "COMPLETED"
@@ -42,12 +46,12 @@ async def queue_task(job_id: str, coro):
 
 
 @router.post("/run")
-async def create_job(input: Any = Body(...)):
+async def create_job(body: Any = Body(...)):
     job_id = str(uuid.uuid4())
     job = {"id": job_id, "status": "IN_QUEUE"}
     JOBS[job_id] = job
 
-    event = {"id": job_id, "input": input}
+    event = {"id": job_id, "input": body["input"]}
 
     coro = (
         handler(event)
