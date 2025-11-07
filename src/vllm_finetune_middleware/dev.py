@@ -4,7 +4,7 @@ import time
 import uuid
 from typing import Any
 
-from fastapi import APIRouter, FastAPI, Body
+from fastapi import APIRouter, Body, FastAPI
 
 from .middlewares import FineTuningMiddleware
 from .worker import handler

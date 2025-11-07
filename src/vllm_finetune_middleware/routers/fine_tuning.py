@@ -106,8 +106,6 @@ async def job_daemon(job_id: str):
             )
             resp.raise_for_status()
 
-        shutil.rmtree(tempdir)
-
     except Exception as e:
         logging.exception(f"Failed to download model artifacts for job {job_id}: {e}")
 

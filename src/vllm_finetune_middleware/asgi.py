@@ -1,29 +1,14 @@
 """RunPod middleware for routing fine-tuning requests to a local FastAPI app."""
 
-import httpx
 from fastapi import APIRouter, FastAPI, HTTPException
 from fastapi.responses import JSONResponse
 
-from .routers import files, fine_tuning
-
+from .routers import files, fine_tuning, models
 
 router = APIRouter(prefix="/v1")
 router.include_router(files.router)
 router.include_router(fine_tuning.router)
-
-
-@router.delete("/models/{model_id}")
-async def delete_model(model_id: str):
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            "http://localhost:8000/v1/unload_lora_adapter",
-            json={"lora_name": model_id},
-        )
-    if resp.status_code != 200:
-        raise HTTPException(status_code=resp.status_code, detail=resp.text)
-
-    return {"id": model_id, "deleted": True}
-
+router.include_router(models.router)
 
 app = FastAPI()
 app.include_router(router)
