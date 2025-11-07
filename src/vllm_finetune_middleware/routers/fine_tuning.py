@@ -173,9 +173,31 @@ async def retrieve_job(job_id: str):
 
     job_read = JOBS[job_id]
     job_read.status = STATUS_MAP[body["status"]]
+
     if job_read.status in ("succeeded", "failed", "cancelled"):
         job_read.finished_at = int(time.time())
+
     if body.get("error"):
         job_read.error = body["error"]
 
     return job_read
+
+
+@router.post("/jobs/{job_id}/cancel", response_model=JobRead)
+async def cancel_job(job_id: str):
+    if job_id not in JOBS:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    async with httpx.AsyncClient() as client:
+        resp = await client.post(
+            RUNPOD_ENDPOINT_URL + "/cancel/" + job_id,
+            headers={
+                "Accept": "application/json",
+                "Authorization": f"Bearer {RUNPOD_API_KEY}",
+            },
+        )
+
+        if resp.is_error:
+            raise HTTPException(status_code=resp.status_code, detail=resp.text)
+
+    return JOBS[job_id]
