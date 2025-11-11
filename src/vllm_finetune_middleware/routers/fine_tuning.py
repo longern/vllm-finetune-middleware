@@ -15,10 +15,8 @@ from pydantic import BaseModel
 
 from .files import get_s3_client
 
-RUNPOD_ENDPOINT_URL = os.environ.get(
-    "RUNPOD_ENDPOINT_URL", "http://localhost:8000/runpod"
-)
-RUNPOD_API_KEY = os.environ.get("RUNPOD_API_KEY", "")
+RUNPOD_ENDPOINT_URL = os.getenv("RUNPOD_ENDPOINT_URL", "http://localhost:8000/runpod")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "")
 
 router = APIRouter(prefix="/fine_tuning", tags=["fine_tuning"])
 
@@ -90,7 +88,8 @@ async def job_daemon(job_id: str):
         if job.status == "succeeded":
             break
 
-    if "AWS_ARTIFACTS_URL" not in os.environ:
+    artifacts_url = os.getenv("AWS_ARTIFACTS_URL")
+    if artifacts_url is None:
         return
 
     try:
@@ -99,7 +98,7 @@ async def job_daemon(job_id: str):
 
         tempdir = tempfile.mkdtemp(prefix=prefix)
 
-        model_s3_path = os.path.join(os.environ["AWS_ARTIFACTS_URL"], job_id, "model")
+        model_s3_path = os.path.join(artifacts_url, job_id, "model")
         download_s3_directory(model_s3_path, tempdir)
 
         model_name = os.path.basename(tempdir).replace(".", ":")

@@ -4,6 +4,7 @@ import logging
 import os
 import shutil
 import subprocess
+import tempfile
 
 import yaml
 
@@ -69,28 +70,37 @@ def handler(event):
         raise ValueError("training_file is required in job input")
 
     training_file_path = os.path.join(WORKER_VOLUME_DIR, "files", training_file_id)
-    dataset_dest = os.path.expanduser("~/dataset.jsonl")
-    shutil.copy(training_file_path, dataset_dest)
     artifacts_dir = os.path.join(WORKER_VOLUME_DIR, "artifacts", job_id)
 
     extra_args = []
+
     if "n_epochs" in hyperparameters:
         extra_args.extend(["--num_train_epochs", str(hyperparameters["n_epochs"])])
 
-    process = subprocess.run(
-        [
+    with tempfile.TemporaryDirectory() as tempdir:
+        os.mkdir(os.path.join(tempdir, "data"))
+        shutil.copy(
+            training_file_path,
+            os.path.join(tempdir, "data", "train.jsonl"),
+        )
+
+        run_args = [
             *method_command,
             "--model_name_or_path",
             job_input["model"],
-            "--dataset",
-            dataset_dest,
-            "--save_dir",
+            "--dataset_name",
+            tempdir,
+            "--output_dir",
             os.path.join(artifacts_dir, "model"),
             "--logging_dir",
             os.path.join(artifacts_dir, "logs"),
+            "--use_peft",
+            "--save_only_model",
+            "--save_strategy",
+            "no",
             *extra_args,
         ]
-    )
+        process = subprocess.run(run_args)
 
     if process.returncode != 0:
         raise RuntimeError(f"Fine-tuning job {job_id} failed.")

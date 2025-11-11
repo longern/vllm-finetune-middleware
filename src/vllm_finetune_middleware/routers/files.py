@@ -12,9 +12,7 @@ from starlette.responses import StreamingResponse
 
 router = APIRouter(prefix="/files", tags=["files"])
 
-RUNPOD_ENDPOINT_URL = os.environ.get(
-    "RUNPOD_ENDPOINT_URL", "http://localhost:8000/runpod"
-)
+RUNPOD_ENDPOINT_URL = os.getenv("RUNPOD_ENDPOINT_URL", "http://localhost:8000/runpod")
 
 
 def get_s3_client():

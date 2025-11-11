@@ -18,10 +18,12 @@ Set the credentials for your S3-compatible storage and RunPod endpoint:
 ```bash
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-export AWS_S3_ENDPOINT_URL=https://s3.your-provider.com
+export AWS_REGION=<your-region>
+export AWS_S3_ENDPOINT=https://s3.your-provider.com
 export AWS_UPLOAD_URL=s3://bucket/upload-prefix
 export AWS_ARTIFACTS_URL=s3://bucket/artifacts-prefix
-export RUNPOD_ENDPOINT_URL=https://your-runpod-endpoint/runpod
+export RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/<your-endpoint-id>
+export RUNPOD_API_KEY=<rpa_your-api-key>
 ```
 
 ### 2. Run the vLLM server with the middleware
