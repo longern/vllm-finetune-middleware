@@ -1,6 +1,8 @@
 import asyncio
+import json
 import logging
 import time
+import traceback
 import uuid
 from typing import Any
 
@@ -17,14 +19,19 @@ JOB_TASKS: dict[str, asyncio.Task] = {}
 
 def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counter()):
     def wrapper(task: asyncio.Task):
+        exception = task.exception()
         if task.cancelled():
             JOBS[job_id]["status"] = "CANCELLED"
-        elif task.exception() is not None:
+        elif exception is not None:
             JOBS[job_id]["status"] = "FAILED"
-            JOBS[job_id]["error"] = {"message": str(task.exception())}
-            logging.exception(
-                f"Job {job_id} failed with exception", exc_info=task.exception()
+            JOBS[job_id]["error"] = json.dumps(
+                {
+                    "error_message": str(exception),
+                    "error_traceback": "".join(traceback.format_exception(exception)),
+                    "error_type": str(type(exception)),
+                }
             )
+            logging.exception(f"Job {job_id} failed with exception", exc_info=exception)
         else:
             JOBS[job_id]["output"] = task.result()
             JOBS[job_id]["status"] = "COMPLETED"

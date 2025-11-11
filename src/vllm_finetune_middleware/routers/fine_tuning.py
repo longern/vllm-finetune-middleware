@@ -30,6 +30,12 @@ class Job(BaseModel):
     suffix: str | None = None
 
 
+class JobError(BaseModel):
+    code: str
+    message: str
+    param: str | None = None
+
+
 class JobRead(Job):
     object: Literal["fine_tuning.job"] = "fine_tuning.job"
     id: str
@@ -37,7 +43,7 @@ class JobRead(Job):
     created_at: int
     finished_at: int | None = None
     fine_tuned_model: str | None = None
-    error: dict | None = None
+    error: JobError | None = None
     result_files: list[str] | None = None
 
 
@@ -134,10 +140,6 @@ async def create_job(job: Job):
         id=body["id"],
         status="queued",
         created_at=int(time.time()),
-        finished_at=None,
-        fine_tuned_model=None,
-        error=None,
-        result_files=None,
     )
     JOBS[job_read.id] = job_read
 
@@ -178,7 +180,7 @@ async def retrieve_job(job_id: str):
         job_read.finished_at = int(time.time())
 
     if body.get("error"):
-        job_read.error = body["error"]
+        job_read.error = JobError(code="error", message=body["error"])
 
     return job_read
 
