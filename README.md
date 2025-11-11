@@ -18,7 +18,7 @@ Set the credentials for your S3-compatible storage and RunPod endpoint:
 ```bash
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
-export AWS_ENDPOINT_URL=https://s3.your-provider.com
+export AWS_S3_ENDPOINT_URL=https://s3.your-provider.com
 export AWS_UPLOAD_URL=s3://bucket/upload-prefix
 export AWS_ARTIFACTS_URL=s3://bucket/artifacts-prefix
 export RUNPOD_ENDPOINT_URL=https://your-runpod-endpoint/runpod

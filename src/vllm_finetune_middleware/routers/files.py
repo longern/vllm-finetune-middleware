@@ -22,8 +22,11 @@ def get_s3_client():
         service_name="s3",
         aws_access_key_id=os.environ["AWS_ACCESS_KEY_ID"],
         aws_secret_access_key=os.environ["AWS_SECRET_ACCESS_KEY"],
-        endpoint_url=os.environ["AWS_ENDPOINT_URL"],
-        config=Config(s3={"addressing_style": "virtual"}),
+        region_name=os.getenv("AWS_REGION"),
+        endpoint_url=os.environ["AWS_S3_ENDPOINT"],
+        config=Config(
+            s3={"addressing_style": os.getenv("AWS_S3_ADDRESSING_STYLE", "auto")}
+        ),
     )
 
 
