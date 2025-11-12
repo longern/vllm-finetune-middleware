@@ -3,7 +3,6 @@
 import asyncio
 import logging
 import os
-import shutil
 import tempfile
 import time
 from typing import Literal
@@ -96,7 +95,8 @@ async def job_daemon(job_id: str):
         job = JOBS[job_id]
         prefix = f"ft.{job.suffix}." if job.suffix else "ft."
 
-        tempdir = tempfile.mkdtemp(prefix=prefix)
+        model_download_dir = os.getenv("MODEL_DOWNLOAD_DIR")
+        tempdir = tempfile.mkdtemp(prefix=prefix, dir=model_download_dir)
 
         model_s3_path = os.path.join(artifacts_url, job_id, "model")
         download_s3_directory(model_s3_path, tempdir)
