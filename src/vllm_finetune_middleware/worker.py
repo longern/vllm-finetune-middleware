@@ -35,14 +35,15 @@ def get_config():
 config = get_config()
 
 
-def get_method_command(method_type: str) -> list[str]:
+def get_method_system_config(method_type: str) -> dict:
     if method_type not in config["methods"]:
         raise ValueError(f"Unsupported fine-tuning method: {method_type}")
 
-    if "command" not in config["methods"][method_type]:
+    method_config = config["methods"][method_type]
+    if "command" not in method_config:
         raise ValueError(f"Missing command for method: {method_type}")
 
-    method_command = config["methods"][method_type]["command"]
+    method_command = method_config["command"]
     if type(method_command) is str:
         method_command = [method_command]
 
@@ -50,7 +51,9 @@ def get_method_command(method_type: str) -> list[str]:
         isinstance(cmd, str) for cmd in method_command
     ), "Method command must be a list of strings."
 
-    return method_command
+    env = method_config.get("env", {})
+
+    return {"command": method_command, "env": env}
 
 
 def handler(event):
@@ -63,7 +66,7 @@ def handler(event):
     method_type = method.get("type", "supervised")
     method_config = method.get(method_type, {})
     hyperparameters = method_config.get("hyperparameters", {})
-    method_command = get_method_command(method_type)
+    method_system_config = get_method_system_config(method_type)
 
     training_file_id = job_input.get("training_file")
     if not training_file_id:
@@ -85,7 +88,7 @@ def handler(event):
         )
 
         run_args = [
-            *method_command,
+            *method_system_config["command"],
             "--model_name_or_path",
             job_input["model"],
             "--dataset_name",
@@ -100,10 +103,16 @@ def handler(event):
             "no",
             *extra_args,
         ]
-        process = subprocess.run(run_args)
+        process = subprocess.run(
+            run_args,
+            env={**os.environ, **method_system_config["env"]},
+            capture_output=True,
+            text=True,
+        )
 
     if process.returncode != 0:
-        raise RuntimeError(f"Fine-tuning job {job_id} failed.")
+        logger.error("%s", process.stderr)
+        raise RuntimeError(f"Fine-tuning job {job_id} failed.\n{process.stderr}")
 
     return {"id": job_id, "status": "succeeded"}
 
@@ -111,8 +120,5 @@ def handler(event):
 # Start the Serverless function when the script is run
 if __name__ == "__main__":
     import runpod
-    from runpod import RunPodLogger
-
-    logger = RunPodLogger()
 
     runpod.serverless.start({"handler": handler})

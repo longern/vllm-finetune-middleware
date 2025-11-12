@@ -86,6 +86,9 @@ def cancel_job(job_id: str):
     if job_id not in JOBS:
         return {"error": "Job not found"}, 404
 
+    if JOBS[job_id]["status"] not in ["IN_QUEUE", "RUNNING"]:
+        return {"error": "Job cannot be cancelled"}, 400
+
     task = JOB_TASKS.get(job_id)
     task.cancel()
 
