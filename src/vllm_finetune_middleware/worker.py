@@ -80,6 +80,11 @@ def handler(event):
     if "n_epochs" in hyperparameters:
         extra_args.extend(["--num_train_epochs", str(hyperparameters["n_epochs"])])
 
+    integrations = method_config.get("integrations", [])
+    for integration in integrations:
+        if integration["type"] == "tensorboard":
+            extra_args.extend(["--logging_dir", os.path.join(artifacts_dir, "logs")])
+
     with tempfile.TemporaryDirectory() as tempdir:
         os.mkdir(os.path.join(tempdir, "data"))
         shutil.copy(
@@ -95,8 +100,6 @@ def handler(event):
             tempdir,
             "--output_dir",
             os.path.join(artifacts_dir, "model"),
-            "--logging_dir",
-            os.path.join(artifacts_dir, "logs"),
             "--use_peft",
             "--save_only_model",
             "--save_strategy",
