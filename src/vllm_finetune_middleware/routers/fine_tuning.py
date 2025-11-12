@@ -50,7 +50,7 @@ JOBS: dict[str, JobRead] = {}
 STATUS_MAP = {
     "IN_QUEUE": "queued",
     "COMPLETED": "succeeded",
-    "RUNNING": "running",
+    "IN_PROGRESS": "running",
     "CANCELLED": "cancelled",
     "FAILED": "failed",
     "TIMED_OUT": "failed",

@@ -48,7 +48,7 @@ JOB_QUEUE_LOCK = asyncio.Lock()
 
 async def queue_task(job_id: str, coro):
     async with JOB_QUEUE_LOCK:
-        JOBS[job_id]["status"] = "RUNNING"
+        JOBS[job_id]["status"] = "IN_PROGRESS"
         await coro
 
 
@@ -86,7 +86,7 @@ def cancel_job(job_id: str):
     if job_id not in JOBS:
         return {"error": "Job not found"}, 404
 
-    if JOBS[job_id]["status"] not in ["IN_QUEUE", "RUNNING"]:
+    if JOBS[job_id]["status"] not in ["IN_QUEUE", "IN_PROGRESS"]:
         return {"error": "Job cannot be cancelled"}, 400
 
     task = JOB_TASKS.get(job_id)
