@@ -85,6 +85,21 @@ async def retrieve_job(job_id: str):
     return JOBS.get(job_id)
 
 
+class StatusLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args is None or len(record.args) < 5:
+            return True
+
+        _, method, pathname, _, status_code, *_ = record.args
+        if method == "GET" and pathname.startswith("/status/") and status_code == 200:
+            return False
+        return True
+
+
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(StatusLogFilter())
+
+
 @router.post("/cancel/{job_id}")
 def cancel_job(job_id: str):
     if job_id not in JOBS:
