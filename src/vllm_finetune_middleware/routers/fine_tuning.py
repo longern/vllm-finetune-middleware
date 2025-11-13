@@ -80,7 +80,15 @@ def download_s3_directory(s3_directory_url: str, tempdir: str):
 async def job_daemon(job_id: str):
     while True:
         await asyncio.sleep(5)
-        job = await retrieve_job(job_id)
+
+        try:
+            job = await retrieve_job(job_id)
+        except HTTPException as exception:
+            if exception.status_code == 404:
+                logging.warning("Job %s not found, stopping daemon", job_id)
+                JOBS.pop(job_id, None)
+                return
+
         if job.status in ("failed", "cancelled"):
             return
 

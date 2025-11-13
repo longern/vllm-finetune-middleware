@@ -19,10 +19,21 @@ JOB_TASKS: dict[str, asyncio.Task] = {}
 
 def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counter()):
     def wrapper(task: asyncio.Task):
-        exception = task.exception()
-        if task.cancelled():
+        if job_id not in JOBS:
+            return
+
+        JOB_TASKS.pop(job_id, None)
+
+        try:
+            JOBS[job_id]["output"] = task.result()
+            JOBS[job_id]["status"] = "COMPLETED"
+            execution_time = int((time.perf_counter() - start_time) * 1000)
+            JOBS[job_id]["executionTime"] = execution_time
+
+        except asyncio.CancelledError:
             JOBS[job_id]["status"] = "CANCELLED"
-        elif exception is not None:
+
+        except Exception as exception:
             JOBS[job_id]["status"] = "FAILED"
             JOBS[job_id]["error"] = json.dumps(
                 {
@@ -32,13 +43,6 @@ def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counte
                 }
             )
             logging.exception(f"Job {job_id} failed with exception", exc_info=exception)
-        else:
-            JOBS[job_id]["output"] = task.result()
-            JOBS[job_id]["status"] = "COMPLETED"
-            execution_time = int((time.perf_counter() - start_time) * 1000)
-            JOBS[job_id]["executionTime"] = execution_time
-
-        JOB_TASKS.pop(job_id, None)
 
     return wrapper
 
