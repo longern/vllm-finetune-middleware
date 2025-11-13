@@ -26,7 +26,8 @@ async def delete_model(model_id: str):
 async def push_model_to_hub(model_id: str, repo_id: str, hf_token: str):
     from huggingface_hub import HfApi
 
-    adapter_path = os.path.join(tempfile.gettempdir(), model_id.replace(":", "."))
+    model_download_dir = os.getenv("MODEL_DOWNLOAD_DIR", tempfile.gettempdir())
+    adapter_path = os.path.join(model_download_dir, model_id.replace(":", "."))
 
     api = HfApi(token=hf_token)
 

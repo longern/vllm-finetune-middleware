@@ -118,9 +118,14 @@ async def job_daemon(job_id: str):
 @router.post("/jobs", response_model=JobRead)
 async def create_job(job: Job):
     client = httpx.AsyncClient()
+
+    extra_args = {}
+    if os.getenv("RUNPOD_WEBHOOK_URL"):
+        extra_args["webhook"] = os.environ["RUNPOD_WEBHOOK_URL"]
+
     resp = await client.post(
         RUNPOD_ENDPOINT_URL + "/run",
-        json={"input": job.model_dump()},
+        json={"input": job.model_dump(), **extra_args},
         headers={
             "Accept": "application/json",
             "Authorization": f"Bearer {RUNPOD_API_KEY}",

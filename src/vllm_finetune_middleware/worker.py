@@ -6,6 +6,7 @@ import shutil
 import subprocess
 import tempfile
 
+import fsspec
 import yaml
 
 WORKER_VOLUME_DIR = os.getenv("WORKER_VOLUME_DIR", os.path.expanduser("~/volume"))
@@ -14,7 +15,7 @@ logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
 
 
-def get_config():
+def get_config(s3=None):
     FINE_TUNING_CONFIG_FILE = os.getenv(
         "FINE_TUNING_CONFIG_FILE",
         os.path.join(WORKER_VOLUME_DIR, "default_config.yaml"),
@@ -23,7 +24,7 @@ def get_config():
     config = {}
 
     if os.path.exists(FINE_TUNING_CONFIG_FILE):
-        with open(FINE_TUNING_CONFIG_FILE, "r") as f:
+        with fsspec.open(FINE_TUNING_CONFIG_FILE, "r", s3=s3) as f:
             config = yaml.safe_load(f)
 
     if "methods" not in config:
@@ -32,10 +33,9 @@ def get_config():
     return config
 
 
-config = get_config()
+def get_method_system_config(method_type: str, s3=None) -> dict:
+    config = get_config(s3=s3)
 
-
-def get_method_system_config(method_type: str) -> dict:
     if method_type not in config["methods"]:
         raise ValueError(f"Unsupported fine-tuning method: {method_type}")
 
@@ -60,13 +60,24 @@ def handler(event):
     job_id = event["id"]
     job_input = event["input"]
 
+    s3_config = event.get("s3Config")
+    s3_init = (
+        None
+        if s3_config is None
+        else {
+            "key": s3_config["accessId"],
+            "secret": s3_config["accessSecret"],
+            "client_kwargs": {"endpoint_url": s3_config["endpointUrl"]},
+        }
+    )
+
     logger.info(f"Processing job {job_id} with input: {job_input}")
 
     method = job_input.get("method", {})
     method_type = method.get("type", "supervised")
     method_config = method.get(method_type, {})
     hyperparameters = method_config.get("hyperparameters", {})
-    method_system_config = get_method_system_config(method_type)
+    method_system_config = get_method_system_config(method_type, s3=s3_init)
 
     training_file_id = job_input.get("training_file")
     if not training_file_id:
@@ -108,7 +119,7 @@ def handler(event):
         ]
         process = subprocess.run(
             run_args,
-            env={**os.environ, **method_system_config["env"]},
+            env=os.environ | method_system_config["env"],
             capture_output=True,
             text=True,
         )
