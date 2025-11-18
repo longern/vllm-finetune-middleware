@@ -33,7 +33,7 @@ async def push_model_to_hub(model_id: str, body: PushModelToHubRequestBody):
     from huggingface_hub import HfApi
 
     model_download_dir = os.getenv("MODEL_DOWNLOAD_DIR", tempfile.gettempdir())
-    adapter_path = os.path.join(model_download_dir, model_id.replace(":", "."))
+    adapter_path = os.path.join(model_download_dir, model_id.replace(":", "."), "model")
 
     api = HfApi(token=body.hf_token)
 

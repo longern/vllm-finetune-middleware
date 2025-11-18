@@ -1,6 +1,7 @@
 """Router for fine-tuning jobs."""
 
 import asyncio
+import io
 import logging
 import os
 import tempfile
@@ -25,6 +26,7 @@ class Job(BaseModel):
     training_file: str
     method: dict | None = None
     suffix: str | None = None
+    integrations: list[dict] | None = None
 
 
 class JobError(BaseModel):
@@ -54,6 +56,37 @@ STATUS_MAP = {
     "FAILED": "failed",
     "TIMED_OUT": "failed",
 }
+
+
+def tfevent_to_csv(log_dir: str) -> str:
+    import csv
+    from tensorboard.backend.event_processing.event_accumulator import EventAccumulator
+
+    event_acc = EventAccumulator(log_dir)
+    event_acc.Reload()
+
+    tags = event_acc.Tags()["scalars"]
+
+    text_buf = io.StringIO()
+    writer = csv.writer(text_buf)
+    writer.writerow(["step", "wall_time"] + tags)
+
+    steps = set()
+    tag_data = {}
+
+    for tag in tags:
+        events = event_acc.Scalars(tag)
+        tag_data[tag] = {event.step: event.value for event in events}
+        steps.update([event.step for event in events])
+
+    for step in sorted(steps):
+        row = [step, None]
+        for tag in tags:
+            value = tag_data[tag].get(step, "")
+            row.append(value)
+        writer.writerow(row)
+
+    return text_buf.getvalue()
 
 
 def download_s3_directory(s3_directory_url: str, tempdir: str):
@@ -106,8 +139,8 @@ async def job_daemon(job_id: str):
         model_download_dir = os.getenv("MODEL_DOWNLOAD_DIR")
         tempdir = tempfile.mkdtemp(prefix=prefix, dir=model_download_dir)
 
-        model_s3_path = os.path.join(artifacts_url, job_id, "model")
-        download_s3_directory(model_s3_path, tempdir)
+        job_artifacts_s3_path = os.path.join(artifacts_url, job_id)
+        download_s3_directory(job_artifacts_s3_path, tempdir)
 
         model_name = os.path.basename(tempdir).replace(".", ":")
         job.fine_tuned_model = model_name
@@ -115,9 +148,29 @@ async def job_daemon(job_id: str):
         async with httpx.AsyncClient() as client:
             resp = await client.post(
                 "http://localhost:8000/v1/load_lora_adapter",
-                json={"lora_name": model_name, "lora_path": tempdir},
+                json={
+                    "lora_name": model_name,
+                    "lora_path": os.path.join(tempdir, "model"),
+                },
             )
             resp.raise_for_status()
+
+            try:
+                logs_path = os.path.join(tempdir, "logs")
+                if os.path.exists(logs_path):
+                    csv_bytes = tfevent_to_csv(logs_path).encode("utf-8")
+                    csv_io = io.BytesIO(csv_bytes)
+
+                    file_resp = await client.post(
+                        "http://localhost:8000/v1/files",
+                        files={"file": ("training_logs.csv", csv_io, "text/csv")},
+                    )
+
+                    file_resp.raise_for_status()
+                    file_body = file_resp.json()
+                    job.result_files = [file_body["id"]]
+            except Exception:
+                logging.exception(f"Failed to upload training logs for job {job_id}")
 
     except Exception as e:
         logging.exception(f"Failed to download model artifacts for job {job_id}: {e}")

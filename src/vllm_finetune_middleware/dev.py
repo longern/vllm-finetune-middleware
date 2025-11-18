@@ -44,6 +44,11 @@ def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counte
             )
             logging.exception(f"Job {job_id} failed with exception", exc_info=exception)
 
+        finally:
+            logging.info(
+                "Job %s finished with status %s", job_id, JOBS[job_id]["status"]
+            )
+
     return wrapper
 
 
@@ -52,6 +57,7 @@ JOB_QUEUE_LOCK = asyncio.Lock()
 
 async def queue_task(job_id: str, coro):
     async with JOB_QUEUE_LOCK:
+        logging.info("Starting job %s", job_id)
         JOBS[job_id]["status"] = "IN_PROGRESS"
         await coro
 

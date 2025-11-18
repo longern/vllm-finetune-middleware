@@ -124,9 +124,9 @@ def handler(event):
     if "n_epochs" in hyperparameters:
         extra_args.extend(["--num_train_epochs", str(hyperparameters["n_epochs"])])
 
-    integrations = method_config.get("integrations", [])
+    integrations = job_input.get("integrations") or []
     for integration in integrations:
-        if integration["type"] == "tensorboard":
+        if integration.get("type") == "tensorboard":
             extra_args.extend(["--logging_dir", os.path.join(artifacts_dir, "logs")])
 
     with tempfile.TemporaryDirectory() as tempdir:
@@ -154,6 +154,11 @@ def handler(event):
             model_output_dir = os.path.join(artifacts_dir, "model")
             deferred_upload = lambda: None
 
+        command = method_system_config["command"]
+        for command_part in command:
+            if not isinstance(command_part, str):
+                raise ValueError("Command parts must be strings.")
+
         run_args = [
             *method_system_config["command"],
             "--model_name_or_path",
@@ -168,6 +173,11 @@ def handler(event):
             "no",
             *extra_args,
         ]
+
+        logger.info(
+            f"Running fine-tuning job {job_id} with command: {' '.join(run_args)}"
+        )
+
         process = subprocess.run(
             run_args,
             env=os.environ | method_system_config["env"],
