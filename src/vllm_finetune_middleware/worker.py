@@ -9,7 +9,7 @@ import tempfile
 
 import yaml
 
-WORKER_VOLUME_DIR = os.getenv("WORKER_VOLUME_DIR", os.path.expanduser("~/volume"))
+WORKER_VOLUME_DIR = os.getenv("WORKER_VOLUME_DIR", os.path.expanduser("~/.lawftune"))
 
 logger = logging.getLogger(__name__)
 logger.setLevel(logging.INFO)
@@ -22,7 +22,7 @@ def is_uri(path: str) -> bool:
 def get_config(s3=None):
     FINE_TUNING_CONFIG_FILE = os.getenv(
         "FINE_TUNING_CONFIG_FILE",
-        os.path.join(WORKER_VOLUME_DIR, "default_config.yaml"),
+        os.path.join(WORKER_VOLUME_DIR, "config.yaml"),
     )
 
     config = {}

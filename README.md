@@ -1,11 +1,11 @@
 # vllm-finetune-middleware
 
-Utilities, routers, and middleware that help proxy `/v1/fine_tuning` and file routes to local FastAPI apps while orchestrating RunPod-style fine-tuning jobs backed by an S3-compatible object store.
+Utilities, routers, and middleware that help proxy `/v1/fine_tuning` and file routes to local FastAPI apps while orchestrating RunPod-style fine-tuning jobs backed by an S3-compatible object store or a shared local directory.
 
 ## Features
 - ASGI/FastAPI apps that mimic the OpenAI `/v1/fine_tuning` and `/v1/files` APIs.
 - Middleware (`FineTuningMiddleware`) that intercepts `/v1/fine_tuning/*` requests and creates RunPod jobs to handle fine-tuning requests.
-- File router with S3 uploads/downloads so training artifacts can be staged for RunPod jobs.
+- File router with S3 uploads/downloads, plus local-directory fallback, so training artifacts can be staged for RunPod jobs.
 
 ## Installation
 ```bash
@@ -25,6 +25,13 @@ export AWS_ARTIFACTS_URL=s3://bucket/artifacts-prefix
 export RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/<your-endpoint-id>
 export RUNPOD_API_KEY=<rpa_your-api-key>
 ```
+
+If you want `/v1/files` to store data locally instead of S3, set `AWS_UPLOAD_URL` to a non-`s3://` path. For example:
+```bash
+export WORKER_VOLUME_DIR=/runpod-volume/vllm-finetune
+export AWS_UPLOAD_URL=files
+```
+In local mode, relative paths are resolved under `WORKER_VOLUME_DIR`, so the example above writes uploads to `/runpod-volume/vllm-finetune/files/<file id>`. The API process and the worker must share that directory.
 
 ### 2. Run the vLLM server with the middleware
 ```bash

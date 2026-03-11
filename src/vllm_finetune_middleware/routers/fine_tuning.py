@@ -6,6 +6,7 @@ import logging
 import os
 import tempfile
 import time
+import urllib.parse
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -15,8 +16,8 @@ from pydantic import BaseModel
 
 from .files import get_s3_client
 
-RUNPOD_ENDPOINT_URL = os.getenv("RUNPOD_ENDPOINT_URL", "http://localhost:8000/runpod")
-RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "")
+RUNPOD_ENDPOINT_URL = os.getenv("RUNPOD_ENDPOINT_URL", "http://localhost:8000")
+RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "not-needed")
 
 router = APIRouter(prefix="/fine_tuning", tags=["fine_tuning"])
 
@@ -185,7 +186,7 @@ async def create_job(job: Job):
         extra_args["webhook"] = os.environ["RUNPOD_WEBHOOK_URL"]
 
     resp = await client.post(
-        RUNPOD_ENDPOINT_URL + "/run",
+        urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "run"),
         json={"input": job.model_dump(), **extra_args},
         headers={
             "Accept": "application/json",
@@ -223,7 +224,7 @@ async def retrieve_job(job_id: str):
 
     async with httpx.AsyncClient() as client:
         resp = await client.get(
-            RUNPOD_ENDPOINT_URL + "/status/" + job_id,
+            urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "status", "{job_id}"),
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {RUNPOD_API_KEY}",
@@ -257,7 +258,7 @@ async def cancel_job(job_id: str):
 
     async with httpx.AsyncClient() as client:
         resp = await client.post(
-            RUNPOD_ENDPOINT_URL + "/cancel/" + job_id,
+            urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "cancel", job_id),
             headers={
                 "Accept": "application/json",
                 "Authorization": f"Bearer {RUNPOD_API_KEY}",

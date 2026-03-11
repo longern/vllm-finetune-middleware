@@ -77,8 +77,8 @@ async def create_job(body: Any = Body(...)):
     )
 
     task = asyncio.create_task(queue_task(job_id, coro))
-    task.add_done_callback(task_done_callback_wrapper(job_id))
     JOB_TASKS[job_id] = task
+    task.add_done_callback(task_done_callback_wrapper(job_id))
 
     return job
 
