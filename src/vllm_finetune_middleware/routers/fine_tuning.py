@@ -6,7 +6,6 @@ import logging
 import os
 import tempfile
 import time
-import urllib.parse
 from typing import Literal
 from urllib.parse import urlparse
 
@@ -14,10 +13,8 @@ import httpx
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 
+from ..internal_runpod import app as internal_runpod_app
 from .files import get_s3_client
-
-RUNPOD_ENDPOINT_URL = os.getenv("RUNPOD_ENDPOINT_URL", "http://localhost:8000")
-RUNPOD_API_KEY = os.getenv("RUNPOD_API_KEY", "not-needed")
 
 router = APIRouter(prefix="/fine_tuning", tags=["fine_tuning"])
 
@@ -57,6 +54,28 @@ STATUS_MAP = {
     "FAILED": "failed",
     "TIMED_OUT": "failed",
 }
+
+
+def get_external_runpod_endpoint() -> str | None:
+    return os.getenv("RUNPOD_ENDPOINT_URL")
+
+
+def get_runpod_client() -> httpx.AsyncClient:
+    headers = {"Accept": "application/json"}
+    external_runpod_endpoint = get_external_runpod_endpoint()
+
+    if external_runpod_endpoint:
+        runpod_api_key = os.getenv("RUNPOD_API_KEY", "not-needed")
+        headers["Authorization"] = f"Bearer {runpod_api_key}"
+        return httpx.AsyncClient(
+            base_url=external_runpod_endpoint.rstrip("/") + "/", headers=headers
+        )
+
+    return httpx.AsyncClient(
+        transport=httpx.ASGITransport(app=internal_runpod_app),
+        base_url="http://internal-runpod/",
+        headers=headers,
+    )
 
 
 def tfevent_to_csv(log_dir: str) -> str:
@@ -179,20 +198,12 @@ async def job_daemon(job_id: str):
 
 @router.post("/jobs", response_model=JobRead)
 async def create_job(job: Job):
-    client = httpx.AsyncClient()
-
     extra_args = {}
     if os.getenv("RUNPOD_WEBHOOK_URL"):
         extra_args["webhook"] = os.environ["RUNPOD_WEBHOOK_URL"]
 
-    resp = await client.post(
-        urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "run"),
-        json={"input": job.model_dump(), **extra_args},
-        headers={
-            "Accept": "application/json",
-            "Authorization": f"Bearer {RUNPOD_API_KEY}",
-        },
-    )
+    async with get_runpod_client() as client:
+        resp = await client.post("run", json={"input": job.model_dump(), **extra_args})
 
     if resp.is_error:
         raise HTTPException(status_code=resp.status_code, detail=resp.text)
@@ -222,14 +233,8 @@ async def retrieve_job(job_id: str):
     if job_id not in JOBS:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.get(
-            urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "status", "{job_id}"),
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {RUNPOD_API_KEY}",
-            },
-        )
+    async with get_runpod_client() as client:
+        resp = await client.get(f"status/{job_id}")
 
         if resp.status_code == 404:
             JOBS.pop(job_id, None)
@@ -256,14 +261,8 @@ async def cancel_job(job_id: str):
     if job_id not in JOBS:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    async with httpx.AsyncClient() as client:
-        resp = await client.post(
-            urllib.parse.urljoin(RUNPOD_ENDPOINT_URL, "cancel", job_id),
-            headers={
-                "Accept": "application/json",
-                "Authorization": f"Bearer {RUNPOD_API_KEY}",
-            },
-        )
+    async with get_runpod_client() as client:
+        resp = await client.post(f"cancel/{job_id}")
 
         if resp.is_error:
             raise HTTPException(status_code=resp.status_code, detail=resp.text)

@@ -1,0 +1,119 @@
+"""Internal RunPod-compatible FastAPI app."""
+
+import asyncio
+import json
+import logging
+import time
+import traceback
+import uuid
+from typing import Any
+
+from fastapi import APIRouter, Body, FastAPI, HTTPException
+
+from .worker import handler
+
+router = APIRouter(tags=["runpod"])
+
+JOBS: dict[str, dict[str, Any]] = {}
+JOB_TASKS: dict[str, asyncio.Task] = {}
+JOB_QUEUE_LOCK = asyncio.Lock()
+
+
+def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counter()):
+    def wrapper(task: asyncio.Task):
+        if job_id not in JOBS:
+            return
+
+        JOB_TASKS.pop(job_id, None)
+
+        try:
+            JOBS[job_id]["output"] = task.result()
+            JOBS[job_id]["status"] = "COMPLETED"
+            JOBS[job_id]["executionTime"] = int(
+                (time.perf_counter() - start_time) * 1000
+            )
+        except asyncio.CancelledError:
+            JOBS[job_id]["status"] = "CANCELLED"
+        except Exception as exception:
+            JOBS[job_id]["status"] = "FAILED"
+            JOBS[job_id]["error"] = json.dumps(
+                {
+                    "error_message": str(exception),
+                    "error_traceback": "".join(traceback.format_exception(exception)),
+                    "error_type": str(type(exception)),
+                }
+            )
+            logging.exception("Job %s failed with exception", job_id, exc_info=exception)
+        finally:
+            logging.info("Job %s finished with status %s", job_id, JOBS[job_id]["status"])
+
+    return wrapper
+
+
+async def queue_task(job_id: str, coro):
+    async with JOB_QUEUE_LOCK:
+        logging.info("Starting job %s", job_id)
+        JOBS[job_id]["status"] = "IN_PROGRESS"
+        await coro
+
+
+@router.post("/run")
+async def create_job(body: Any = Body(...)):
+    job_id = str(uuid.uuid4())
+    job = {"id": job_id, "status": "IN_QUEUE"}
+    JOBS[job_id] = job
+
+    event = {"id": job_id, "input": body["input"]}
+    coro = (
+        handler(event)
+        if asyncio.iscoroutinefunction(handler)
+        else asyncio.to_thread(handler, event)
+    )
+
+    task = asyncio.create_task(queue_task(job_id, coro))
+    JOB_TASKS[job_id] = task
+    task.add_done_callback(task_done_callback_wrapper(job_id))
+
+    return job
+
+
+@router.get("/status/{job_id}")
+async def retrieve_job(job_id: str):
+    if job_id not in JOBS:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    return JOBS[job_id]
+
+
+@router.post("/cancel/{job_id}")
+async def cancel_job(job_id: str):
+    if job_id not in JOBS:
+        raise HTTPException(status_code=404, detail="Job not found")
+
+    if JOBS[job_id]["status"] not in {"IN_QUEUE", "IN_PROGRESS"}:
+        raise HTTPException(status_code=400, detail="Job cannot be cancelled")
+
+    task = JOB_TASKS.get(job_id)
+    if task is None:
+        raise HTTPException(status_code=404, detail="Job task not found")
+
+    task.cancel()
+    return JOBS[job_id]
+
+
+class StatusLogFilter(logging.Filter):
+    def filter(self, record: logging.LogRecord) -> bool:
+        if record.args is None or len(record.args) < 5:
+            return True
+
+        _, method, pathname, _, status_code, *_ = record.args
+        if method == "GET" and pathname.startswith("/status/") and status_code == 200:
+            return False
+        return True
+
+
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(StatusLogFilter())
+
+app = FastAPI()
+app.include_router(router)

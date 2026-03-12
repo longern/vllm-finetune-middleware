@@ -14,7 +14,7 @@ pip install vllm-finetune-middleware
 
 ## Usage
 ### 1. Configure environment variables
-Set the credentials for your S3-compatible storage and RunPod endpoint:
+Set the credentials for your S3-compatible storage and, if needed, the external RunPod endpoint:
 ```bash
 export AWS_ACCESS_KEY_ID=...
 export AWS_SECRET_ACCESS_KEY=...
@@ -22,9 +22,11 @@ export AWS_REGION=<your-region>
 export AWS_S3_ENDPOINT=https://s3.your-provider.com
 export AWS_UPLOAD_URL=s3://bucket/upload-prefix
 export AWS_ARTIFACTS_URL=s3://bucket/artifacts-prefix
-export RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/<your-endpoint-id>
+export RUNPOD_ENDPOINT_URL=https://api.runpod.ai/v2/<your-endpoint-id>/
 export RUNPOD_API_KEY=<rpa_your-api-key>
 ```
+
+If `RUNPOD_ENDPOINT_URL` is unset, fine-tuning job creation, status polling, and cancellation are routed to the internal RunPod-compatible FastAPI app bundled in this package instead of an external RunPod HTTP endpoint.
 
 If you want `/v1/files` to store data locally instead of S3, set `AWS_UPLOAD_URL` to a non-`s3://` path. For example:
 ```bash
