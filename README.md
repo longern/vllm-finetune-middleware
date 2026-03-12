@@ -35,6 +35,13 @@ export AWS_UPLOAD_URL=files
 ```
 In local mode, relative paths are resolved under `WORKER_VOLUME_DIR`, so the example above writes uploads to `/runpod-volume/vllm-finetune/files/<file id>`. The API process and the worker must share that directory.
 
+If base models are already downloaded on the worker host, set `LOCAL_MODEL_ROOT` to a directory. For a job with model `openai/gpt-oss-120b`, the worker checks `<root>/openai/gpt-oss-120b` first and uses that local path if it exists; otherwise it keeps the original model name and lets the training stack download from the network.
+```bash
+export WORKER_VOLUME_DIR=/runpod-volume/vllm-finetune
+export LOCAL_MODEL_ROOT=path/to/models
+```
+In this example, `models` is resolved as `/runpod-volume/vllm-finetune/path/to/models`.
+
 ### 2. Run the vLLM server with the middleware
 ```bash
 vllm serve qwen/Qwen3-8B --middleware vllm_finetune_middleware.FineTuningMiddleware

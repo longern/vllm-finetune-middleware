@@ -6,6 +6,7 @@ import re
 import shutil
 import subprocess
 import tempfile
+from pathlib import Path
 
 import yaml
 
@@ -17,6 +18,32 @@ logger.setLevel(logging.INFO)
 
 def is_uri(path: str) -> bool:
     return re.match(r"^[A-Za-z][0-9A-Za-z+.-]*://", path) is not None
+
+
+def resolve_model_name_or_path(model_name_or_path: str) -> str:
+    root = os.getenv("LOCAL_MODEL_ROOT", "")
+    if not root:
+        return model_name_or_path
+
+    root_path = Path(root).expanduser()
+    if not root_path.is_absolute():
+        root_path = Path(WORKER_VOLUME_DIR) / root_path
+
+    candidate = root_path / model_name_or_path
+    if candidate.exists():
+        resolved = str(candidate.resolve())
+        logger.info(
+            "Using local model directory for %s: %s",
+            model_name_or_path,
+            resolved,
+        )
+        return resolved
+
+    logger.info(
+        "No local model directory found for %s in LOCAL_MODEL_ROOT, falling back to remote download",
+        model_name_or_path,
+    )
+    return model_name_or_path
 
 
 def get_config(s3=None):
@@ -111,6 +138,7 @@ def handler(event):
     method_config = method.get(method_type, {})
     hyperparameters = method_config.get("hyperparameters", {})
     method_system_config = get_method_system_config(method_type, s3=s3_init)
+    model_name_or_path = resolve_model_name_or_path(job_input["model"])
 
     training_file_id = job_input.get("training_file")
     if not training_file_id:
@@ -162,7 +190,7 @@ def handler(event):
         run_args = [
             *method_system_config["command"],
             "--model_name_or_path",
-            job_input["model"],
+            model_name_or_path,
             "--dataset_name",
             os.path.join(tempdir, "dataset"),
             "--output_dir",
