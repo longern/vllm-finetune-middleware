@@ -155,7 +155,9 @@ def handler(event):
     integrations = job_input.get("integrations") or []
     for integration in integrations:
         if integration.get("type") == "tensorboard":
-            extra_args.extend(["--logging_dir", os.path.join(artifacts_dir, "logs")])
+            method_system_config["env"]["TENSORBOARD_LOG_DIR"] = os.path.join(
+                artifacts_dir, "logs"
+            )
 
     with tempfile.TemporaryDirectory() as tempdir:
         os.makedirs(os.path.join(tempdir, "dataset", "data"), exist_ok=True)
