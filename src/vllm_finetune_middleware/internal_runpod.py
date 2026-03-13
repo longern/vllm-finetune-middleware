@@ -43,9 +43,13 @@ def task_done_callback_wrapper(job_id: str, start_time: float = time.perf_counte
                     "error_type": str(type(exception)),
                 }
             )
-            logging.exception("Job %s failed with exception", job_id, exc_info=exception)
+            logging.exception(
+                "Job %s failed with exception", job_id, exc_info=exception
+            )
         finally:
-            logging.info("Job %s finished with status %s", job_id, JOBS[job_id]["status"])
+            logging.info(
+                "Job %s finished with status %s", job_id, JOBS[job_id]["status"]
+            )
 
     return wrapper
 
@@ -107,8 +111,10 @@ class StatusLogFilter(logging.Filter):
             return True
 
         _, method, pathname, _, status_code, *_ = record.args
+
         if method == "GET" and pathname.startswith("/status/") and status_code == 200:
             return False
+
         return True
 
 
